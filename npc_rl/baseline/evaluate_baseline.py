@@ -48,14 +48,13 @@ def run_episode(env, agent: BaselineAgent, seed: int, max_steps: int):
         total_reward += reward
         steps += 1
         if isinstance(info, dict):
-            if info.get("shot_fired", False):
-                shots += 1
-            if info.get("shot_hit", False):
-                hits += 1
-            last_info = info
+                last_info = info
 
-    win = int(last_info.get("win", 0)) if isinstance(last_info, dict) else 0
-    accuracy = (hits / shots) if shots > 0 else np.nan
+        # simple terminal reward metric
+       
+    win = 1 if reward > 0 else 0
+    accuracy = float(hits / shots) if shots > 0 else 0.0
+
 
     return {
         "seed": seed,
@@ -86,26 +85,31 @@ def main():
 
     cfg = BaselineConfig(retreat_threshold=args.retreat_threshold)
     agent = BaselineAgent(cfg)
+    from npc_rl.env.shootergrid_env import ShooterGridEnv
+    env = ShooterGridEnv()
 
-    raise NotImplementedError("Import and instantiate your ShooterGridEnv here, then delete this line.")
+  
+
 
     rows = []
     for s in seeds:
         rows.append(run_episode(env, agent, seed=s, max_steps=args.max_steps))
 
+    if len(rows)==0:
+        print("No episodes collected")
+        return
+
     df = pd.DataFrame(rows)
     df.to_csv(outdir / "episodes_baseline.csv", index=False)
 
-    summary = df.agg(
-        win_rate=("win", "mean"),
-        mean_return=("return", "mean"),
-        std_return=("return", "std"),
-        mean_steps=("steps", "mean"),
-        std_steps=("steps", "std"),
-        mean_accuracy=("accuracy", "mean"),
-        n=("win", "count"),
-    ).to_frame().T
-    summary.to_csv(outdir / "metrics_baseline.csv", index=False)
+    summary = df.agg({
+        "win": ["mean", "count"],
+        "return": ["mean", "std"],
+        "steps": ["mean", "std"],
+        "accuracy": ["mean"],
+    })
+
+    summary.to_csv(outdir / "metrics_baseline.csv")
 
     print("Wrote:", outdir / "episodes_baseline.csv")
     print("Wrote:", outdir / "metrics_baseline.csv")

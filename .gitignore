@@ -1,0 +1,24 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment
+.venv/
+env/
+venv/
+
+# Model outputs
+ppo_model/
+results_baseline/
+results_ppo/
+*.zip
+
+# Logs
+*.log
+
+
+.DS_Store
+
+ppo_model/
+ .*zip
+results_baseline/

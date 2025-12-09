@@ -3,7 +3,7 @@
 # npc_rl/env/run_env_test.py
 
 import os
-from shootergrid_env import ShooterGridEnv
+from npc_rl.env.shootergrid_env import ShooterGridEnv
 import numpy as n
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -27,4 +27,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    env = ShooterGridEnv()
+    obs, _ = env.reset()
+    for _ in range(20):
+        action = env.sample_action()
+        obs, reward, terminated, truncated, info = env.step(action)
+        if terminated or truncated:
+            print(info)
+            break

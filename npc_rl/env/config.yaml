@@ -1,4 +1,4 @@
 seed: 123
 grid_size: 7
-max_steps: 40
-shoot_probability: 0.4
+max_steps: 25
+shoot_probability: 1.0

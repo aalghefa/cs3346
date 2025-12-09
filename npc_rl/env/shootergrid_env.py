@@ -27,10 +27,9 @@ class ShooterGridEnv(gym.Env):
 
     metadata = {"render_modes": []}
 
-    def __init__(self, config_path=None):
+    def __init__(self, config_path=None, seed=None):
         super().__init__()
 
-        # Find config.yaml next to this file by default
         if config_path is None:
             this_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(this_dir, "config.yaml")
@@ -41,23 +40,25 @@ class ShooterGridEnv(gym.Env):
         self.grid_size = int(self.cfg["grid_size"])
         self.max_steps = int(self.cfg["max_steps"])
         self.shoot_prob = float(self.cfg["shoot_probability"])
-        self.seed_value = int(self.cfg["seed"])
+        base_seed = int(self.cfg["seed"])
 
-        # Observation: 6 integers
+        if seed is not None:
+            base_seed = seed
+
+        self.rng = np.random.default_rng(base_seed)
+
+        # --- REQUIRED by Gym ---
         self.observation_space = spaces.Box(
             low=0,
             high=self.grid_size,
             shape=(6,),
-            dtype=np.int32,
+            dtype=np.int32
         )
 
-        # One discrete action for each player (0–5)
         self.action_space = spaces.Discrete(6)
 
-        # RNG
-        self.rng = np.random.default_rng(self.seed_value)
-
         self.reset()
+
 
     # ------------- helpers -------------
 
@@ -106,39 +107,69 @@ class ShooterGridEnv(gym.Env):
         return self._get_obs(), {}
 
     def step(self, actions):
-        """
-        actions: (a1, a2) — actions for player 1 and player 2.
-        """
-        a1, a2 = actions
+        # actions is a single int for our agent
+        a1 = int(actions)
+        a2 = self.sample_enemy()
 
-        # Movement
+        reward = 0.0
+        info = {}
+        terminated = False
+
+        # distance BEFORE movement
+        prev_dist = np.linalg.norm(self.p1_pos - self.p2_pos)
+
+        # movement
         self.p1_pos = self._move(self.p1_pos, a1)
         self.p2_pos = self._move(self.p2_pos, a2)
 
-        # Shooting
-        if a1 == 5 and self._line_of_sight(self.p1_pos, self.p2_pos):
-            if self.rng.random() < self.shoot_prob:
-                self.p2_hp -= 1
+        # 1) small reward for actually moving (not camping)
+        if a1 in [1, 2, 3, 4]:
+            reward += 0.01
 
+        # 2) SHOOTING (agent)
+        if a1 == 5 and self._line_of_sight(self.p1_pos, self.p2_pos):
+            # small bonus for shooting while in LOS
+            reward += 0.1
+            if self.rng.random() < self.shoot_prob:
+                # big bonus for a hit
+                self.p2_hp -= 1
+                reward += 1.0
+
+        # 3) SHOOTING (enemy)
         if a2 == 5 and self._line_of_sight(self.p2_pos, self.p1_pos):
             if self.rng.random() < self.shoot_prob:
                 self.p1_hp -= 1
+                reward -= 0.5  # getting hit is bad
 
-        reward = 0.0
-        terminated = False
+        # 4) distance AFTER movement: encourage closing distance
+        dist = np.linalg.norm(self.p1_pos - self.p2_pos)
+        if dist < prev_dist:
+            reward += 0.05
 
+        # 5) tiny survival reward to keep exploring
+        reward += 0.001
+
+        # 6) terminal conditions + result flag
         if self.p1_hp <= 0:
-            reward = -1.0
+            reward += -1.0        # add on top of shaping
             terminated = True
+            info["result"] = "loss"
         elif self.p2_hp <= 0:
-            reward = 1.0
+            reward += 1.0         # add on top of shaping
             terminated = True
+            info["result"] = "win"
 
+        # 7) step limit -> draw if nobody died
         self.steps += 1
-        if self.steps >= self.max_steps:
+        if self.steps >= self.max_steps and not terminated:
             terminated = True
+            info["result"] = "draw"
 
         obs = self._get_obs()
-        info = {}
-
         return obs, reward, terminated, False, info
+
+    def sample_action(self):
+        return self.action_space.sample()
+
+    def sample_enemy(self):
+        return self.action_space.sample()
